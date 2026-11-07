@@ -1,0 +1,50 @@
+name: Auto Token Harvester
+
+on:
+  workflow_dispatch:
+    inputs:
+      amount:
+        description: 'Amount of tokens to generate'
+        required: true
+        default: '100'
+      workers:
+        description: 'Parallel workers (1-20)'
+        required: true
+        default: '8'
+
+jobs:
+  harvest:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright
+          python -m playwright install chromium
+
+      - name: Run Harvester
+        run: |
+          python gh_generator.py ${{ github.event.inputs.amount }} ${{ github.event.inputs.workers }}
+
+      - name: Upload tokens artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tokens-pool
+          path: tokens.json
+
+      - name: Commit and push updated tokens
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add tokens.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "Auto-harvested tokens [skip ci]"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
