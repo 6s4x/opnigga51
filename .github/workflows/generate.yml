@@ -26,9 +26,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install playwright
-          python -m playwright install chrome
-          python -m playwright install-deps
+          pip install --no-cache-dir playwright
+          python -m playwright install --no-shell chromium
 
       - name: Run Harvester
         run: |
