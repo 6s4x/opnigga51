@@ -80,5 +80,5 @@ def generate_batch(count: int = Query(default=5, ge=1, le=25)):
 if __name__ == "__main__":
     import uvicorn
     # Railway passes PORT env variable (e.g. 6799), fallback to 6799 if not set
-    port = int(os.environ.get("PORT", 6799))
+    port = int(os.environ.get("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)

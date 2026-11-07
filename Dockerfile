@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright/python:v1.42.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.64.1-jammy
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY railway_api/ .
 
-ENV PORT=6799
-EXPOSE 6799
+ENV PORT=8080
+EXPOSE 8080
 
 CMD ["python", "main.py"]
