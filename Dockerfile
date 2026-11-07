@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY railway_api/ .
 
-ENV PORT=8000
-EXPOSE 8000
+ENV PORT=6799
+EXPOSE 6799
 
 CMD ["python", "main.py"]

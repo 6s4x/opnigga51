@@ -7,7 +7,6 @@ app = FastAPI(title="RetroStress Token Harvester API")
 
 BASE_URL = "https://retrostress.net"
 
-# True headless configuration for Linux container
 CHROME_ARGS = [
     "--no-sandbox",
     "--disable-dev-shm-usage",
@@ -42,7 +41,6 @@ def generate_one_token():
                 page = context.new_page()
                 page.route("**/*", lambda r: r.abort() if r.request.resource_type in ["image", "media", "font"] else r.continue_())
                 
-                # Navigate to register
                 page.goto(f"{BASE_URL}/register", wait_until="domcontentloaded", timeout=25000)
                 btn = page.locator("#register-submit")
 
@@ -81,5 +79,6 @@ def generate_batch(count: int = Query(default=5, ge=1, le=25)):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
+    # Railway passes PORT env variable (e.g. 6799), fallback to 6799 if not set
+    port = int(os.environ.get("PORT", 6799))
     uvicorn.run(app, host="0.0.0.0", port=port)

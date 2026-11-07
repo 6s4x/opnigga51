@@ -9,14 +9,14 @@ from playwright.sync_api import sync_playwright
 BASE_URL = "https://retrostress.net"
 BRAVE_PATH = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
 TOKENS_FILE = "tokens.json"
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
 
-SLIM_GPU_FLAGS = [
+BROWSER_ARGS = [
     "--disable-blink-features=AutomationControlled",
-    "--ignore-gpu-blocklist",
-    "--enable-gpu-rasterization",
-    "--enable-zero-copy",
-    "--enable-hardware-overlays",
+    "--window-position=-3200,-3200",
+    "--window-size=600,400",
+    "--mute-audio",
+    "--disable-gpu",
+    "--disable-software-rasterizer",
     "--disable-extensions",
     "--disable-default-apps",
     "--disable-sync",
@@ -24,10 +24,9 @@ SLIM_GPU_FLAGS = [
     "--disable-component-update",
     "--disable-breakpad",
     "--disable-domain-reliability",
-    "--mute-audio",
-    "--no-default-browser-check",
     "--no-first-run",
-    "--js-flags=--max-old-space-size=64"
+    "--no-default-browser-check",
+    "--js-flags=--max-old-space-size=48"
 ]
 
 file_lock = Lock()
@@ -57,16 +56,18 @@ def append_token(token):
                 json.dump(tokens, f, indent=2)
         return len(tokens)
 
-def worker_loop(worker_id, amount_needed):
+def worker_routine(worker_id, amount_needed):
     global created_count
     with sync_playwright() as p:
         browser = p.chromium.launch(
             executable_path=BRAVE_PATH,
-            headless=True,
-            args=SLIM_GPU_FLAGS
+            headless=False,
+            args=BROWSER_ARGS
         )
         try:
-            context = browser.new_context(user_agent=USER_AGENT)
+            page = browser.new_page()
+            page.route("**/*", lambda r: r.abort() if r.request.resource_type in ["image", "media", "font"] else r.continue_())
+
             while not stop_event.is_set():
                 with counter_lock:
                     if created_count >= amount_needed:
@@ -74,37 +75,38 @@ def worker_loop(worker_id, amount_needed):
                         break
 
                 try:
-                    page = context.new_page()
-                    page.route("**/*", lambda r: r.abort() if r.request.resource_type in ["image", "media", "font", "stylesheet"] else r.continue_())
-                    page.goto(f"{BASE_URL}/register", wait_until="domcontentloaded", timeout=15000)
+                    t_start = time.time()
+                    page.goto(f"{BASE_URL}/register", wait_until="domcontentloaded", timeout=12000)
                     btn = page.locator("#register-submit")
 
-                    for _ in range(15):
+                    # Turnstile completes in 2.5 - 3.5s
+                    for _ in range(16):
                         if stop_event.is_set():
                             break
-                        page.wait_for_timeout(400)
+                        page.wait_for_timeout(250)
                         if not btn.is_disabled():
                             btn.click()
-                            page.wait_for_timeout(700)
-                            key = page.locator("#generated-key").input_value(timeout=3000)
+                            page.wait_for_timeout(400)
+                            key = page.locator("#generated-key").input_value(timeout=2000)
                             if key and key.startswith("usr_"):
                                 with counter_lock:
                                     if created_count < amount_needed:
                                         created_count += 1
                                         total = append_token(key)
-                                        print(f"[+] Added ({created_count}/{amount_needed}) -> {key} (Total pool: {total})", flush=True)
+                                        elapsed = round(time.time() - t_start, 2)
+                                        print(f"[+] [W{worker_id}] {key} ({created_count}/{amount_needed} | {elapsed}s | Pool: {total})", flush=True)
                                         if created_count >= amount_needed:
                                             stop_event.set()
                                 break
-                    page.close()
                 except Exception:
-                    try:
-                        page.close()
-                    except Exception:
-                        pass
                     if stop_event.is_set():
                         break
-                    time.sleep(0.5)
+                    time.sleep(0.3)
+
+            try:
+                page.close()
+            except Exception:
+                pass
         finally:
             try:
                 browser.close()
@@ -112,7 +114,7 @@ def worker_loop(worker_id, amount_needed):
                 pass
 
 def main():
-    add_amount = 10
+    add_amount = 50
     concurrency = 4
 
     if len(sys.argv) > 1 and sys.argv[1].isdigit():
@@ -123,19 +125,19 @@ def main():
     existing = load_existing_tokens()
     current_pool = len(existing)
 
-    print("[*] High-Speed GPU-Accelerated Token Generator", flush=True)
+    print("[*] Starc Turbo Engine (Offscreen Native Fast-Solve)", flush=True)
     print(f"[*] Amount to ADD  : +{add_amount}", flush=True)
     print(f"[*] Active Workers : {concurrency}", flush=True)
     print(f"[*] Current Pool   : {current_pool} token(s)", flush=True)
-    print(f"[*] Expected Total : {current_pool + add_amount} token(s)\n", flush=True)
+    print(f"[*] Target Pool    : {current_pool + add_amount} token(s)\n", flush=True)
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = [executor.submit(worker_loop, i, add_amount) for i in range(concurrency)]
+        futures = [executor.submit(worker_routine, i + 1, add_amount) for i in range(concurrency)]
         for f in futures:
             f.result()
 
     final_pool = len(load_existing_tokens())
-    print(f"\n[+] Added {created_count} new token(s). Total pool: {final_pool} (Saved to {TOKENS_FILE})", flush=True)
+    print(f"\n[+] Finished. Added {created_count} tokens. Total pool: {final_pool} (Saved to {TOKENS_FILE})", flush=True)
 
 if __name__ == "__main__":
     main()
